@@ -229,17 +229,35 @@ input.on('submit', function(data) {
      if (data == '' && last_submit!= '') {
          data = last_submit;
      }
-     gdb.execCLI(data).then(
-        function(result) {
-            mylogcmd(result);
-            last_submit = data;
-        },
-        function(error) { 
-            mylogcmd(error);
-        },
-    )
+     if (data.length > 1 && data[0] == '-') {
+        gdb.execMI(data).then(
+            function(result) {
+                mylogcmd(JSON.stringify(result));
+                last_submit = data;
+            },
+            function(error) { 
+                mylogcmd(error);
+            },
+        )
+     }
+     else {
+        gdb.execCLI(data).then(
+            function(result) {
+                mylogcmd(result);
+                last_submit = data;
+            },
+            function(error) { 
+                mylogcmd(error);
+            },
+        )
+    }
+    // reset command line
     input.clearValue();
     input.focus();
+});
+
+input.key('C-q', function() {
+    process.exit(0);
 });
 
 function mylog(msg) {
