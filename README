@@ -14,3 +14,23 @@ sudo apt-get install -y nodejs
 npm install gdb-js
 npm install babel-polyfill
 npm install blessed
+
+### debug in Visual Code
+
+// launch.json
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch Program",
+            "program": "${workspaceFolder}/shgdb.js", 
+            "console": "externalTerminal"
+        }
+
+    ]
+}
