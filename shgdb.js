@@ -1,7 +1,7 @@
 const gdbjs = require ('gdb-js');
 const { spawn } = require('child_process');
 const babel = require('babel-polyfill');
-const blessed = require('blessed');
+const blessed = require('neo-blessed');
 
 function format(fmt, ...args) {
     if (!fmt.match(/^(?:(?:(?:[^{}]|(?:\{\{)|(?:\}\}))+)|(?:\{[0-9]+\}))+$/)) {
@@ -36,7 +36,7 @@ screen.on('resize', function() {
 });
 
 // Create a box perfectly centered horizontally and vertically.
-var source = blessed.box({ 
+var source = blessed.box({
     top: 'top',
     left: 'left',
     width: '70%',
@@ -63,7 +63,7 @@ var source = blessed.box({
     }
   });
 
-var title = blessed.text({ 
+var title = blessed.text({
     top: 0,
     left: 3,
     width: '70%-5',
@@ -75,7 +75,7 @@ var title = blessed.text({
     },
   });
 
-var vars = blessed.box({ 
+var vars = blessed.box({
     top: 'top',
     right: '0',
     width: '30%',
@@ -102,7 +102,7 @@ var vars = blessed.box({
     }
 });
 
-var backtrace = blessed.box({ 
+var backtrace = blessed.box({
     top: '25%',
     right: '0',
     width: '30%',
@@ -129,7 +129,7 @@ var backtrace = blessed.box({
     }
 });
 
-var status = blessed.box({ 
+var status = blessed.box({
     top: '50%',
     right: '0',
     width: '30%',
@@ -151,7 +151,7 @@ var status = blessed.box({
     scrollable: true,
     scrollbar: {
       style: {
-        bg: 'blue' 
+        bg: 'blue'
       }
     }
 });
@@ -187,7 +187,7 @@ var input = blessed.textbox({
     bottom: 1,
     left: 0,
     height: 1,
-    width: '100%', 
+    width: '100%',
     content: '',
     tags: true,
     style: {
@@ -203,7 +203,7 @@ var statusbar = blessed.textbox({
     bottom: 0,
     left: 0,
     height: 1,
-    width: '100%', 
+    width: '100%',
     content: 'status',
     tags: true,
     style: {
@@ -223,7 +223,10 @@ screen.append(input);
 screen.append(statusbar);
 input.hide();
 
-var last_submit = ''
+var last_submit = '';
+var submit_history = [];
+var submit_hist_idx = -1;
+
 input.on('submit', function(data) {
      // replay last command when hit enter
      if (data == '' && last_submit!= '') {
@@ -234,8 +237,10 @@ input.on('submit', function(data) {
             function(result) {
                 mylogcmd(JSON.stringify(result));
                 last_submit = data;
+                submit_history.push(data);
+                submit_hist_idx = submit_history.length - 1;
             },
-            function(error) { 
+            function(error) {
                 mylogcmd(error);
             },
         )
@@ -245,10 +250,12 @@ input.on('submit', function(data) {
             function(result) {
                 mylogcmd(result);
                 last_submit = data;
+                submit_history.push(data);
+                submit_hist_idx = submit_history.length - 1;
             },
-            function(error) { 
+            function(error) {
                 mylogcmd(error);
-            },
+            }
         )
     }
     // reset command line
@@ -258,6 +265,27 @@ input.on('submit', function(data) {
 
 input.key('C-q', function() {
     process.exit(0);
+});
+
+input.on('keypress', function(ch, key) {
+    if (submit_history.length == 0)
+        return;
+    switch (key.name) {
+        case 'up':
+            submit_hist_idx--;
+            if (submit_hist_idx < 0)
+                submit_hist_idx += submit_history.length
+            submit_hist_idx = submit_hist_idx % submit_history.length;
+            input.setValue(submit_history[submit_hist_idx]);
+            screen.render();
+            break;
+        case 'down':
+            submit_hist_idx ++;
+            submit_hist_idx = submit_hist_idx % submit_history.length;
+            input.setValue(submit_history[submit_hist_idx]);
+            screen.render();
+            break;
+    }
 });
 
 function mylog(msg) {
@@ -340,7 +368,7 @@ async function get_info(data) {
         function(result) {
             mylog(result);
         }
-    ) 
+    )
     await gdb.execCLI('info locals').then(
         function(result) {
             vars.setContent('');
@@ -353,7 +381,7 @@ async function get_info(data) {
                 gdb.execCLI(format('ptype {0}', r1)).then(
                     function(result) {
                         let r2 = result.match(/type\s*=\s*(.*)/i);
-                        if (r2) {
+                        if (r2) { 
                             vars.pushLine(format("{0} {1} {2}", r2[1], r[1], r[2]));
                         }
                     }
@@ -379,7 +407,7 @@ async function get_info(data) {
         }
     );
 }
- 
+
 // called when debugee stopped
 gdb.on('stopped', function(data) {
     mylog(data.reason);
@@ -389,7 +417,7 @@ gdb.on('stopped', function(data) {
     if (data.reason == 'signal-received') {
         mylog(data.reason);
     }
-    if (data.reason == 'breakpoint-hit' || 
+    if (data.reason == 'breakpoint-hit' ||
         data.reason == 'end-stepping-range' ||
         data.reason == 'signal-received') {
 
