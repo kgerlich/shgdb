@@ -27,7 +27,7 @@ var screen = blessed.screen({
 
 screen.title = 'GDB shell with node-js and gdb-js';
 
-screen.key('q', function() {
+screen.key('C-q', function() {
     process.exit(0);
 });
 
@@ -223,10 +223,16 @@ screen.append(input);
 screen.append(statusbar);
 input.hide();
 
+var last_submit = ''
 input.on('submit', function(data) {
+     // replay last command when hit enter
+     if (data == '' && last_submit!= '') {
+         data = last_submit;
+     }
      gdb.execCLI(data).then(
         function(result) {
             mylogcmd(result);
+            last_submit = data;
         },
         function(error) { 
             mylogcmd(error);
@@ -235,10 +241,6 @@ input.on('submit', function(data) {
     input.clearValue();
     input.focus();
 });
-
-
-// Render the screen.
-screen.render();
 
 function mylog(msg) {
     status.pushLine(msg);
@@ -252,7 +254,12 @@ function mylogcmd(msg) {
     screen.render();
 }
 
-let child = spawn('gdb', ['--interpreter=mi2', '/home/kgerlicher/shgdb/testapp/testapp'])
+if (process.argv.length != 3) {
+    console.log('specify a target!');
+    process.exit(1)
+}
+
+let child = spawn('gdb', ['--interpreter=mi2', process.argv[2]])
 child.on('exit', function (code, signal) {
     mylog('child process exited with ' +
                 `code ${code} and signal ${signal}`);
@@ -361,6 +368,9 @@ gdb.on('stopped', function(data) {
     input.show();
     input.focus();
     statusbar.setText('stopped');
+    if (data.reason == 'signal-received') {
+        mylog(data.reason);
+    }
     if (data.reason == 'breakpoint-hit' || 
         data.reason == 'end-stepping-range' ||
         data.reason == 'signal-received') {
@@ -371,8 +381,6 @@ gdb.on('stopped', function(data) {
             }
         )
 
-    } else if (data.reason == 'signal-received') {
-        mylog();
     }
 });
 
@@ -417,6 +425,7 @@ async function start() {
         }
     );
     await gdb.run();
+    await screen.render();
 }
 
 start();

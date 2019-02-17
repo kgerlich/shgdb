@@ -34,3 +34,6 @@ npm install blessed
 
     ]
 }
+
+# create a testapp from testapp/testapp.c 
+gcc -g -o testapp testapp.c
