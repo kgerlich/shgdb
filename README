@@ -1,4 +1,7 @@
-README
+## README
+
+### install NODE.js and npm
+sudo apt-get install nodejs npm
 
 ### required node.js modules
 npm install gdb-js
