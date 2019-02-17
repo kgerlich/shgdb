@@ -19,6 +19,46 @@ function format(fmt, ...args) {
     });
 }
 
+function decodeUtf8(arrayBuffer) {
+    var result = "";
+    var i = 0;
+    var c = 0;
+    var c1 = 0;
+    var c2 = 0;
+
+    var data = new Uint8Array(arrayBuffer);
+
+    // If we have a BOM skip it
+    if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
+        i = 3;
+    }
+
+    while (i < data.length) {
+        c = data[i];
+
+        if (c < 128) {
+        result += String.fromCharCode(c);
+        i++;
+        } else if (c > 191 && c < 224) {
+        if( i+1 >= data.length ) {
+            throw "UTF-8 Decode failed. Two byte character was truncated.";
+        }
+        c2 = data[i+1];
+        result += String.fromCharCode( ((c&31)<<6) | (c2&63) );
+        i += 2;
+        } else {
+        if (i+2 >= data.length) {
+            throw "UTF-8 Decode failed. Multi byte character was truncated.";
+        }
+        c2 = data[i+1];
+        c3 = data[i+2];
+        result += String.fromCharCode( ((c&15)<<12) | ((c2&63)<<6) | (c3&63) );
+        i += 3;
+        }
+    }
+    return result;
+}
+
 // Create a screen object.
 var screen = blessed.screen({
   smartCSR: true,
@@ -106,7 +146,7 @@ var backtrace = blessed.box({
     top: '25%',
     right: '0',
     width: '30%',
-    height: '25%',
+    height: '10%',
     content: '',
     tags: true,
     border: {
@@ -128,6 +168,34 @@ var backtrace = blessed.box({
       }
     }
 });
+
+var breakpoints = blessed.box({
+    top: '35%',
+    right: '0',
+    width: '30%',
+    height: '10%',
+    content: '',
+    tags: true,
+    border: {
+      type: 'line'
+    },
+    style: {
+      fg: 'white',
+      border: {
+        fg: '#f0f0f0'
+      },
+    },
+    alwaysScroll:true,
+    keys:true,
+    mouse:true,
+    scrollable: true,
+    scrollbar: {
+      style: {
+        bg: 'blue'
+      }
+    }
+});
+
 
 var status = blessed.box({
     top: '50%',
@@ -217,6 +285,7 @@ screen.append(source);
 screen.append(title);
 screen.append(vars);
 screen.append(backtrace);
+screen.append(breakpoints);
 screen.append(status);
 screen.append(cmd);
 screen.append(input);
@@ -226,7 +295,9 @@ input.hide();
 var last_submit = '';
 var submit_history = [];
 var submit_hist_idx = -1;
+var breakpoints = [];
 
+// when command line is submitted with Enter...
 input.on('submit', function(data) {
      // replay last command when hit enter
      if (data == '' && last_submit!= '') {
@@ -263,15 +334,17 @@ input.on('submit', function(data) {
     input.focus();
 });
 
+// quit on CTRL-q in command line
 input.key('C-q', function() {
     process.exit(0);
 });
 
+// handle special keys
 input.on('keypress', function(ch, key) {
-    if (submit_history.length == 0)
-        return;
     switch (key.name) {
         case 'up':
+            if (submit_history.length == 0)
+                return;
             submit_hist_idx--;
             if (submit_hist_idx < 0)
                 submit_hist_idx += submit_history.length
@@ -280,11 +353,24 @@ input.on('keypress', function(ch, key) {
             screen.render();
             break;
         case 'down':
+            if (submit_history.length == 0)
+                return;
             submit_hist_idx ++;
             submit_hist_idx = submit_hist_idx % submit_history.length;
             input.setValue(submit_history[submit_hist_idx]);
             screen.render();
             break;
+        case 'f5':
+            input.emit('submit', 'continue');
+            break;
+        case 'f9':
+            input.emit('submit', 'b ');
+            break;
+        case 'f10':
+            input.emit('submit', 'next');
+            break;
+        case 'f11':
+            input.emit('submit', 'si');
     }
 });
 
@@ -311,6 +397,17 @@ child.on('exit', function (code, signal) {
                 `code ${code} and signal ${signal}`);
 
     process.exit(1);
+});
+
+
+child.stdout.on('data', function(data) {
+    let s = decodeUtf8(data.buffer);
+    //mylog(s);
+});
+
+child.stderr.on('data', function(data) {
+    let s = decodeUtf8(data.buffer);
+    //mylog(data);
 });
 
 var gdb = new gdbjs.GDB(child)
@@ -340,7 +437,13 @@ gdb.on('status', function(data) {
 
 // listen to notiications
 gdb.on('notify', function(data) {
-    mylog('notify ' + data .state);
+    mylog('notify ' + data.state);
+    switch(data.state) {
+        case 'breakpoint-created':
+            mylogcmd(JSON.stringify(data.data.bkpt));
+            breakpoints.push(data.data.bkpt);
+            break;
+    }
 });
 
 async function get_info(data) {
@@ -419,7 +522,8 @@ gdb.on('stopped', function(data) {
     }
     if (data.reason == 'breakpoint-hit' ||
         data.reason == 'end-stepping-range' ||
-        data.reason == 'signal-received') {
+        data.reason == 'signal-received' ||
+        data.reason == 'function-finished') {
 
         get_info(data).then(
             function() {
