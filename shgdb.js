@@ -295,7 +295,8 @@ input.hide();
 var last_submit = '';
 var submit_history = [];
 var submit_hist_idx = -1;
-var breakpoints = [];
+var breakpoint_list = [];
+var last_stopped_data = undefined;
 
 // when command line is submitted with Enter...
 input.on('submit', function(data) {
@@ -440,16 +441,45 @@ gdb.on('notify', function(data) {
     mylog('notify ' + data.state);
     switch(data.state) {
         case 'breakpoint-created':
+        case 'breakpoint-modified':
             mylogcmd(JSON.stringify(data.data.bkpt));
-            breakpoints.push(data.data.bkpt);
+            breakpoint_list.push(data.data.bkpt);
+            if (last_stopped_data) {
+                get_info(last_stopped_data).then(
+                    function() {
+                        screen.render();
+                    }
+                )
+            }
             break;
     }
 });
 
+function line_has_breakpoint(line, file)
+{
+    for (var i in breakpoint_list) {
+        if (breakpoint_list[i].fullname == file && breakpoint_list[i].line == line) {
+            return true;
+        }
+    }
+    return false;
+}
+
 async function get_info(data) {
     let h = source.height;
     let cli = format("list {0}:{1}", data.thread.frame.file, data.thread.frame.line);
-
+    await gdb.execMI('-stack-list-frames').then(
+        function(result) {
+            backtrace.setContent('');
+            var s = result.stack;
+            for (var i in s) {
+                backtrace.setLine(i, format("{0} {1}:{2} {3}", s[i].value.level, s[i].value.func, s[i].value.line, s[i].value.file))
+                if (s[i].value.level == 0) {
+                    title.setText(s[i].value.fullname);
+                }
+            }
+        }
+    );
     await gdb.execCLI(format('set listsize {0}',h-2));
     await gdb.execCLI(cli).then(
         function(result) {
@@ -458,8 +488,15 @@ async function get_info(data) {
             for (var i in result) {
                 let r = result[i].match(/([0-9]+)[\t]*(.*)/i);
                 if (r && r.length > 2) {
-                    if (r[1] == data.thread.frame.line) {
-                        source.setLine(i, '{black-fg}{white-bg}{bold}' + r[2] + '{/bold}{/white-bg}{/black-fg}');
+                    let bg_color = '{white-bg}';
+                    let bg_color_end = '{/white-bg}';
+                    let bLineBp = line_has_breakpoint(r[1], data.thread.frame.file);
+                    if (bLineBp && (r[1] != data.thread.frame.line)) {
+                        bg_color = '{blue-bg}';
+                        bg_color_end = '{/blue-bg}';
+                    }
+                    if ((r[1] == data.thread.frame.line) || bLineBp) {
+                        source.setLine(i, '{black-fg}' + bg_color + '{bold}' + r[2] + '{/bold}' + bg_color_end + '{/black-fg}');
                     } else {
                         source.setLine(i, r[2]);
                     }
@@ -497,18 +534,6 @@ async function get_info(data) {
             }
         }
     )
-    await gdb.execMI('-stack-list-frames').then(
-        function(result) {
-            backtrace.setContent('');
-            var s = result.stack;
-            for (var i in s) {
-                backtrace.setLine(i, format("{0} {1}:{2} {3}", s[i].value.level, s[i].value.func, s[i].value.line, s[i].value.file))
-                if (s[i].value.level == 0) {
-                    title.setText(s[i].value.fullname);
-                }
-            }
-        }
-    );
 }
 
 // called when debugee stopped
@@ -524,7 +549,7 @@ gdb.on('stopped', function(data) {
         data.reason == 'end-stepping-range' ||
         data.reason == 'signal-received' ||
         data.reason == 'function-finished') {
-
+        last_stopped_data = data;
         get_info(data).then(
             function() {
                 screen.render();
