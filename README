@@ -1,0 +1,6 @@
+README
+
+### required node.js modules
+npm install gdb-js
+npm install babel-polyfill
+npm install blessed
