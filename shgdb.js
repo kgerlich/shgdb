@@ -1,4 +1,4 @@
-const gdbjs = require ('gdb-js');
+const gdbmi_class = require('./gdbmi').gdbmi;
 const { spawn } = require('child_process');
 const babel = require('babel-polyfill');
 const blessed = require('neo-blessed');
@@ -305,7 +305,7 @@ input.on('submit', function(data) {
          data = last_submit;
      }
      if (data.length > 1 && data[0] == '-') {
-        gdb.execMI(data).then(
+        gdbmi.cmdMI(data).then(
             function(result) {
                 mylogcmd(JSON.stringify(result));
                 last_submit = data;
@@ -318,7 +318,7 @@ input.on('submit', function(data) {
         )
      }
      else {
-        gdb.execCLI(data).then(
+        gdbmi.cmd(data).then(
             function(result) {
                 mylogcmd(result);
                 last_submit = data;
@@ -392,6 +392,7 @@ if (process.argv.length != 3) {
     process.exit(1)
 }
 
+//let child = spawn('/home/kgerlicher/p4/sw/tools/embedded/qnx/qnx700-ga1/host/linux/x86_64/usr/bin/ntox86_64-gdb', ['--interpreter=mi2', process.argv[2]])
 let child = spawn('gdb', ['--interpreter=mi2', process.argv[2]])
 child.on('exit', function (code, signal) {
     mylog('child process exited with ' +
@@ -402,48 +403,39 @@ child.on('exit', function (code, signal) {
 
 
 child.stdout.on('data', function(data) {
-    let s = decodeUtf8(data.buffer);
+    //let s = decodeUtf8(data.buffer);
     //mylog(s);
 });
 
 child.stderr.on('data', function(data) {
-    let s = decodeUtf8(data.buffer);
+    //let s = decodeUtf8(data.buffer);
     //mylog(data);
 });
 
-var gdb = new gdbjs.GDB(child)
+var gdbmi = new gdbmi_class(child)
 
 // setup CTRL-c handler
 screen.key(['C-c'], function(ch, key) {
     mylog('CTRL-c');
     child.kill('SIGINT');
-    // gdb.interrupt().then(
-    //     function(result) {
-    //         mylog(result);
-    //     }
-    // ).catch(
-    //     function(error) {
-    //         mylog(error);
-    //     }
-    // );
     input.show();
     input.focus();
     mylog('CTRL-c exit');
  });
 
 // listen general status
-gdb.on('status', function(data) {
+gdbmi.on('status', function(data) {
     mylog('status ' + data);
 });
 
 // listen to notiications
-gdb.on('notify', function(data) {
-    mylog('notify ' + data.state);
-    switch(data.state) {
+gdbmi.on('notify', function(data) {
+    mylog('notify ' + data.class);
+    switch(data.class) {
         case 'breakpoint-created':
         case 'breakpoint-modified':
-            mylogcmd(JSON.stringify(data.data.bkpt));
-            breakpoint_list.push(data.data.bkpt);
+            mylogcmd(JSON.stringify(data.bkpt));
+            breakpoint_list.push(data.bkpt);
             if (last_stopped_data) {
                 get_info(last_stopped_data).then(
                     function() {
@@ -467,21 +459,21 @@ function line_has_breakpoint(line, file)
 
 async function get_info(data) {
     let h = source.height;
-    let cli = format("list {0}:{1}", data.thread.frame.file, data.thread.frame.line);
-    await gdb.execMI('-stack-list-frames').then(
+    let cli = format("list {0}:{1}", data.frame.file, data.frame.line);
+    await gdbmi.cmdMI('-stack-list-frames').then(
         function(result) {
             backtrace.setContent('');
             var s = result.stack;
             for (var i in s) {
-                backtrace.setLine(i, format("{0} {1}:{2} {3}", s[i].value.level, s[i].value.func, s[i].value.line, s[i].value.file))
-                if (s[i].value.level == 0) {
-                    title.setText(s[i].value.fullname);
+                backtrace.setLine(i, format("{0} {1}:{2} {3}", s[i].level, s[i].func, s[i].line, s[i].file))
+                if (s[i].level == 0) {
+                    title.setText(s[i].fullname);
                 }
             }
         }
     );
-    await gdb.execCLI(format('set listsize {0}',h-2));
-    await gdb.execCLI(cli).then(
+    await gdbmi.cmd(format('set listsize {0}',h-2));
+    await gdbmi.cmd(cli).then(
         function(result) {
             result = result.split('\n');
             source.setContent('');
@@ -490,12 +482,12 @@ async function get_info(data) {
                 if (r && r.length > 2) {
                     let bg_color = '{white-bg}';
                     let bg_color_end = '{/white-bg}';
-                    let bLineBp = line_has_breakpoint(r[1], data.thread.frame.file);
-                    if (bLineBp && (r[1] != data.thread.frame.line)) {
+                    let bLineBp = line_has_breakpoint(r[1], data.frame.file);
+                    if (bLineBp && (r[1] != data.frame.frame.line)) {
                         bg_color = '{blue-bg}';
                         bg_color_end = '{/blue-bg}';
                     }
-                    if ((r[1] == data.thread.frame.line) || bLineBp) {
+                    if ((r[1] == data.frame.line) || bLineBp) {
                         source.setLine(i, '{black-fg}' + bg_color + '{bold}' + r[2] + '{/bold}' + bg_color_end + '{/black-fg}');
                     } else {
                         source.setLine(i, r[2]);
@@ -509,7 +501,7 @@ async function get_info(data) {
             mylog(result);
         }
     )
-    await gdb.execCLI('info locals').then(
+    await gdbmi.cmd('info locals').then(
         function(result) {
             vars.setContent('');
             result = result.split('\n');
@@ -518,15 +510,14 @@ async function get_info(data) {
                 if (!r)
                     continue;
                 let r1 = r[1];
-                gdb.execCLI(format('ptype {0}', r1)).then(
+                gdbmi.cmd(format('ptype {0}', r1)).then(
                     function(result) {
                         let r2 = result.match(/type\s*=\s*(.*)/i);
-                        if (r2) { 
+                        if (r2) {
                             vars.pushLine(format("{0} {1} {2}", r2[1], r[1], r[2]));
                         }
                     }
-                )
-                .then(
+                ).then(
                     function(result) {
                         screen.render();
                     }
@@ -537,7 +528,7 @@ async function get_info(data) {
 }
 
 // called when debugee stopped
-gdb.on('stopped', function(data) {
+gdbmi.on('stopped', function(data) {
     mylog(data.reason);
     input.show();
     input.focus();
@@ -559,15 +550,14 @@ gdb.on('stopped', function(data) {
     }
 });
 
-gdb.on('running', function(data) {
+gdbmi.on('running', function(data) {
     input.hide();
     statusbar.setText('running');
     screen.render();
 });
 
 async function start() {
-    await gdb.init();
-    await gdb.execCLI('info sharedlibrary').then(
+    await gdbmi.cmd('info sharedlibrary').then(
         function(result) {
             mylog(result);
         },
@@ -575,7 +565,7 @@ async function start() {
             mylog(result);
         }
     );
-    await gdb.execCLI('show non-stop').then(
+    await gdbmi.cmd('show non-stop').then(
         function(result) {
             mylog(result);
         },
@@ -583,7 +573,7 @@ async function start() {
             mylog(result);
         }
     );
-    await gdb.execCLI('set non-stop on').then(
+    await gdbmi.cmd('set non-stop on').then(
         function(result) {
             mylog(result);
         },
@@ -591,7 +581,7 @@ async function start() {
             mylog(result);
         }
     );
-    await gdb.addBreak('testapp.c', 'main').then(
+    await gdbmi.cmd('b main').then(
         function(result) {
             mylog(result);
         },
@@ -599,7 +589,7 @@ async function start() {
             mylog(result);
         }
     );
-    await gdb.run();
+    await gdbmi.cmd('run');
     await screen.render();
 }
 
