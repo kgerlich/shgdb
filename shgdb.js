@@ -18,51 +18,10 @@ function format(fmt, ...args) {
         }
     });
 }
-
-function decodeUtf8(arrayBuffer) {
-    var result = "";
-    var i = 0;
-    var c = 0;
-    var c1 = 0;
-    var c2 = 0;
-
-    var data = new Uint8Array(arrayBuffer);
-
-    // If we have a BOM skip it
-    if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
-        i = 3;
-    }
-
-    while (i < data.length) {
-        c = data[i];
-
-        if (c < 128) {
-        result += String.fromCharCode(c);
-        i++;
-        } else if (c > 191 && c < 224) {
-        if( i+1 >= data.length ) {
-            throw "UTF-8 Decode failed. Two byte character was truncated.";
-        }
-        c2 = data[i+1];
-        result += String.fromCharCode( ((c&31)<<6) | (c2&63) );
-        i += 2;
-        } else {
-        if (i+2 >= data.length) {
-            throw "UTF-8 Decode failed. Multi byte character was truncated.";
-        }
-        c2 = data[i+1];
-        c3 = data[i+2];
-        result += String.fromCharCode( ((c&15)<<12) | ((c2&63)<<6) | (c3&63) );
-        i += 3;
-        }
-    }
-    return result;
-}
-
 // Create a screen object.
 var screen = blessed.screen({
   smartCSR: true,
-  dockBorders: true
+  autoPadding: true
 });
 
 screen.title = 'GDB shell with node-js and gdb-js';
@@ -88,9 +47,13 @@ var source = blessed.box({
     },
     style: {
       fg: 'white',
+      bg: 'blue',
       border: {
         fg: '#f0f0f0'
       },
+      hover: {
+        bg: 'green'
+      }
     },
     alwaysScroll:true,
     keys:true,
@@ -130,6 +93,9 @@ var vars = blessed.box({
       border: {
         fg: '#f0f0f0'
       },
+      hover: {
+        bg: 'green'
+      }
     },
     alwaysScroll:true,
     keys:true,
@@ -157,6 +123,9 @@ var backtrace = blessed.box({
       border: {
         fg: '#f0f0f0'
       },
+      hover: {
+        bg: 'green'
+      }
     },
     alwaysScroll:true,
     keys:true,
@@ -184,6 +153,9 @@ var breakpoints = blessed.box({
       border: {
         fg: '#f0f0f0'
       },
+      hover: {
+        bg: 'green'
+      }
     },
     alwaysScroll:true,
     keys:true,
@@ -195,7 +167,6 @@ var breakpoints = blessed.box({
       }
     }
 });
-
 
 var status = blessed.box({
     top: '50%',
@@ -212,6 +183,9 @@ var status = blessed.box({
       border: {
         fg: '#f0f0f0'
       },
+      hover: {
+        bg: 'green'
+      }
     },
     alwaysScroll:true,
     keys:true,
@@ -227,7 +201,7 @@ var status = blessed.box({
 var cmd = blessed.box({
     bottom: 2,
     left: 'left',
-    width: '100%',
+    width: '50%',
     height: '25%-2',
     content: '',
     tags: true,
@@ -239,6 +213,9 @@ var cmd = blessed.box({
       border: {
         fg: '#A0A0A0 '
       },
+      hover: {
+        bg: 'green'
+      }
     },
     keys:true,
     mouse:true,
@@ -251,11 +228,66 @@ var cmd = blessed.box({
     }
 });
 
-var input = blessed.textbox({
+var stdout = blessed.box({
+    bottom: 2,
+    left: '50%',
+    width: '50%',
+    height: '25%-2',
+    content: '',
+    tags: true,
+    border: {
+      type: 'line'
+    },
+    style: {
+      fg: 'white',
+      border: {
+        fg: '#A0A0A0 '
+      },
+      hover: {
+        bg: 'green'
+      }
+    },
+    keys:true,
+    mouse:true,
+    alwaysScroll:true,
+    scrollable: true,
+    scrollbar: {
+      style: {
+        bg: 'blue'
+      }
+    }
+});
+
+var stdout_title = blessed.text({
+    bottom: 3,
+    left: '50%+2',
+    width: '6',
+    height: '1',
+    content: 'STDOUT',
+    tags: true,
+    style: {
+      fg: 'black',
+      bg: 'white'
+    },
+});
+
+var prompt  = blessed.text({
     bottom: 1,
     left: 0,
     height: 1,
-    width: '100%',
+    width: '1',
+    content: '>',
+    style: {
+      fg: 'white',
+      bg: 'red',
+    }
+});
+
+var input = blessed.textbox({
+    bottom: 1,
+    left: 1,
+    height: 1,
+    width: '50%-1',
     content: '',
     tags: true,
     style: {
@@ -288,9 +320,12 @@ screen.append(backtrace);
 screen.append(breakpoints);
 screen.append(status);
 screen.append(cmd);
+screen.append(stdout);
+screen.append(stdout_title);
+screen.append(prompt);
 screen.append(input);
 screen.append(statusbar);
-input.hide();
+input.focus();
 
 var last_submit = '';
 var submit_history = [];
@@ -311,10 +346,7 @@ input.on('submit', function(data) {
                 last_submit = data;
                 submit_history.push(data);
                 submit_hist_idx = submit_history.length - 1;
-            },
-            function(error) {
-                mylogcmd(error);
-            },
+            }
         )
      }
      else {
@@ -324,9 +356,6 @@ input.on('submit', function(data) {
                 last_submit = data;
                 submit_history.push(data);
                 submit_hist_idx = submit_history.length - 1;
-            },
-            function(error) {
-                mylogcmd(error);
             }
         )
     }
@@ -376,13 +405,13 @@ input.on('keypress', function(ch, key) {
 });
 
 function mylog(msg) {
-    status.pushLine(msg);
+    status.pushLine(msg.replace(/\n/g,''));
     status.setScrollPerc(100);
     screen.render();
 }
 
 function mylogcmd(msg) {
-    cmd.pushLine(msg);
+    cmd.pushLine(msg.replace(/\n/g,''));
     cmd.setScrollPerc(100);
     screen.render();
 }
@@ -403,8 +432,9 @@ child.on('exit', function (code, signal) {
 
 
 child.stdout.on('data', function(data) {
-    //let s = decodeUtf8(data.buffer);
-    //mylog(s);
+    stdout.pushLine(data.toString());
+    stdout.setScrollPerc(100);
+    screen.render();
 });
 
 child.stderr.on('data', function(data) {
@@ -417,16 +447,19 @@ var gdbmi = new gdbmi_class(child)
 // setup CTRL-c handler
 screen.key(['C-c'], function(ch, key) {
     mylog('CTRL-c');
-    child.kill('SIGINT');
+    //child.kill('SIGINT'); 
+    gdbmi.cmdMI('-exec-interrupt --all');
     input.show();
     input.focus();
     mylog('CTRL-c exit');
  });
 
+ function _console(data) {
+    mylogcmd(data.toString());
+}
+
 // listen general status
-gdbmi.on('status', function(data) {
-    mylog('status ' + data);
-});
+gdbmi.on('console', _console);
 
 // listen to notiications
 gdbmi.on('notify', function(data) {
@@ -434,7 +467,7 @@ gdbmi.on('notify', function(data) {
     switch(data.class) {
         case 'breakpoint-created':
         case 'breakpoint-modified':
-            mylogcmd(JSON.stringify(data.bkpt));
+            mylog(JSON.stringify(data.bkpt));
             breakpoint_list.push(data.bkpt);
             if (last_stopped_data) {
                 get_info(last_stopped_data).then(
@@ -458,6 +491,8 @@ function line_has_breakpoint(line, file)
 }
 
 async function get_info(data) {
+    gdbmi.removeListener('console', _console);
+
     let h = source.height;
     let cli = format("list {0}:{1}", data.frame.file, data.frame.line);
     await gdbmi.cmdMI('-stack-list-frames').then(
@@ -520,6 +555,7 @@ async function get_info(data) {
                 ).then(
                     function(result) {
                         screen.render();
+                        gdbmi.on('console', _console);
                     }
                 )
             }
@@ -557,30 +593,7 @@ gdbmi.on('running', function(data) {
 });
 
 async function start() {
-    await gdbmi.cmd('info sharedlibrary').then(
-        function(result) {
-            mylog(result);
-        },
-        function(result) {
-            mylog(result);
-        }
-    );
-    await gdbmi.cmd('show non-stop').then(
-        function(result) {
-            mylog(result);
-        },
-        function(result) {
-            mylog(result);
-        }
-    );
-    await gdbmi.cmd('set non-stop on').then(
-        function(result) {
-            mylog(result);
-        },
-        function(result) {
-            mylog(result);
-        }
-    );
+    mylogcmd('EXECUTING INIT SCRIPT:');
     await gdbmi.cmd('b main').then(
         function(result) {
             mylog(result);

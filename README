@@ -11,7 +11,7 @@ sudo bash nodesource_setup.sh
 sudo apt-get install -y nodejs
 
 ### required node.js modules
-npm install gdb-js
+npm install gdb-mi-parser
 npm install babel-polyfill
 npm install neo-blessed
 
@@ -28,12 +28,12 @@ npm install neo-blessed
             "type": "node",
             "request": "launch",
             "name": "Launch Program",
-            "program": "${workspaceFolder}/shgdb.js", 
+            "program": "${workspaceFolder}/shgdb.js",
             "console": "externalTerminal"
         }
 
     ]
 }
 
-# create a testapp from testapp/testapp.c 
+# create a testapp from testapp/testapp.c
 gcc -g -o testapp testapp.c
