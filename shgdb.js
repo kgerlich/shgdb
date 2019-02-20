@@ -51,9 +51,6 @@ var source = blessed.box({
       border: {
         fg: '#f0f0f0'
       },
-      hover: {
-        bg: 'green'
-      }
     },
     alwaysScroll:true,
     keys:true,
@@ -212,9 +209,6 @@ var cmd = blessed.box({
       fg: 'white',
       border: {
         fg: '#A0A0A0 '
-      },
-      hover: {
-        bg: 'green'
       }
     },
     keys:true,
@@ -242,9 +236,6 @@ var stdout = blessed.box({
       fg: 'white',
       border: {
         fg: '#A0A0A0 '
-      },
-      hover: {
-        bg: 'green'
       }
     },
     keys:true,
@@ -336,6 +327,8 @@ var last_stopped_data = undefined;
 
 // when command line is submitted with Enter...
 input.on('submit', function(data) {
+     input.hide();
+
      // replay last command when hit enter
      if (data == '' && last_submit!= '') {
          data = last_submit;
@@ -347,6 +340,9 @@ input.on('submit', function(data) {
                 last_submit = data;
                 submit_history.push(data);
                 submit_hist_idx = submit_history.length - 1;
+                // reset command line
+                input.clearValue();
+                input.focus();
             }
         )
      }
@@ -357,12 +353,12 @@ input.on('submit', function(data) {
                 last_submit = data;
                 submit_history.push(data);
                 submit_hist_idx = submit_history.length - 1;
+                // reset command line
+                input.clearValue();
+                input.focus();
             }
         )
     }
-    // reset command line
-    input.clearValue();
-    input.focus();
 });
 
 // quit on CTRL-q in command line
@@ -434,28 +430,29 @@ child.on('exit', function (code, signal) {
     process.exit(1);
 });
 
+// child.stdout.on('data', function(data) {
+//     stdout.pushLine(data.toString());
+//     stdout.setScrollPerc(100);
+//     screen.render();
+// });
 
-child.stdout.on('data', function(data) {
-    stdout.pushLine(data.toString());
-    stdout.setScrollPerc(100);
-    screen.render();
-});
-
-child.stderr.on('data', function(data) {
-    //let s = decodeUtf8(data.buffer);
-    //mylog(data);
-});
+// child.stderr.on('data', function(data) {
+//     mylog(data);
+// });
 
 var gdbmi = new gdbmi_class(child)
 
 // setup CTRL-c handler
 screen.key(['C-c'], function(ch, key) {
     mylog('CTRL-c');
-    //child.kill('SIGINT'); 
-    gdbmi.cmdMI('-exec-interrupt --all');
-    input.show();
-    input.focus();
-    mylog('CTRL-c exit');
+    child.kill('SIGINT');
+    gdbmi.cmdMI('-exec-interrupt --all').then(
+      function() {
+        input.show();
+        input.focus();
+        mylog('CTRL-c exit');
+      }
+     );
  });
 
  function _console(data) {
