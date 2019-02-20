@@ -326,6 +326,7 @@ screen.append(prompt);
 screen.append(input);
 screen.append(statusbar);
 input.focus();
+screen.render();
 
 var last_submit = '';
 var submit_history = [];
@@ -416,13 +417,16 @@ function mylogcmd(msg) {
     screen.render();
 }
 
-if (process.argv.length != 3) {
+if (process.argv.length < 3) {
     console.log('specify a target!');
     process.exit(1)
 }
 
-//let child = spawn('/home/kgerlicher/p4/sw/tools/embedded/qnx/qnx700-ga1/host/linux/x86_64/usr/bin/ntox86_64-gdb', ['--interpreter=mi2', process.argv[2]])
-let child = spawn('gdb', ['--interpreter=mi2', process.argv[2]])
+pargs = ['--interpreter=mi2'];
+for (let a = 3; a < process.argv.length;a++) {
+  pargs.push(process.argv[a]);
+}
+let child = spawn(process.argv[2], pargs);
 child.on('exit', function (code, signal) {
     mylog('child process exited with ' +
                 `code ${code} and signal ${signal}`);
@@ -592,18 +596,3 @@ gdbmi.on('running', function(data) {
     screen.render();
 });
 
-async function start() {
-    mylogcmd('EXECUTING INIT SCRIPT:');
-    await gdbmi.cmd('b main').then(
-        function(result) {
-            mylog(result);
-        },
-        function(result) {
-            mylog(result);
-        }
-    );
-    await gdbmi.cmd('run');
-    await screen.render();
-}
-
-start();
