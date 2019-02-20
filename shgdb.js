@@ -328,6 +328,7 @@ var last_stopped_data = undefined;
 // when command line is submitted with Enter...
 input.on('submit', function(data) {
      input.hide();
+     screen.render();
 
      // replay last command when hit enter
      if (data == '' && last_submit!= '') {
@@ -343,6 +344,8 @@ input.on('submit', function(data) {
                 // reset command line
                 input.clearValue();
                 input.focus();
+                input.show();
+                screen.render();
             }
         )
      }
@@ -356,6 +359,8 @@ input.on('submit', function(data) {
                 // reset command line
                 input.clearValue();
                 input.focus();
+                input.show();
+                screen.render();
             }
         )
     }
@@ -537,32 +542,33 @@ async function get_info(data) {
             mylog(result);
         }
     )
-    await gdbmi.cmd('info locals').then(
-        function(result) {
-            vars.setContent('');
-            result = result.split('\n');
-            for (i in result) {
-                let  r = result[i].match(/(.*)\s*=\s*(.*)/i);
-                if (!r)
-                    continue;
-                let r1 = r[1];
-                gdbmi.cmd(format('ptype {0}', r1)).then(
-                    function(result) {
-                        let r2 = result.match(/type\s*=\s*(.*)/i);
-                        if (r2) {
-                            vars.pushLine(format("{0} {1} {2}", r2[1], r[1], r[2]));
-                        }
-                    }
-                ).then(
-                    function(result) {
-                        screen.render();
-                        gdbmi.on('console', _console);
-                    }
-                )
-            }
-        }
-    )
-}
+    // await gdbmi.cmd('info locals').then(
+    //     function(result) {
+    //         vars.setContent('');
+    //         result = result.split('\n');
+    //         for (i in result) {
+    //             let  r = result[i].match(/(.*)\s*=\s*(.*)/i);
+    //             if (!r)
+    //                 continue;
+    //             let r1 = r[1];
+    //             gdbmi.cmd(format('ptype {0}', r1)).then(
+    //                 function(result) {
+    //                     let r2 = result.match(/type\s*=\s*(.*)/i);
+    //                     if (r2) {
+    //                         vars.pushLine(format("{0} {1} {2}", r2[1], r[1], r[2]));
+    //                     }
+    //                 }
+    //             ).then(
+    //                 function(result) {
+    //                     screen.render();
+    //                     gdbmi.on('console', _console);
+    //                 }
+    //             )
+    //         }
+    //     }
+    // )
+    gdbmi.on('console', _console);
+  }
 
 // called when debugee stopped
 gdbmi.on('stopped', function(data) {
