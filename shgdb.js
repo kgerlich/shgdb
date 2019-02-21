@@ -2,6 +2,7 @@ const gdbmi_class = require('./gdbmi').gdbmi;
 const { spawn } = require('child_process');
 const babel = require('babel-polyfill');
 const blessed = require('neo-blessed');
+const { serial, parallel } = require('items-promise');
 
 function format(fmt, ...args) {
     if (!fmt.match(/^(?:(?:(?:[^{}]|(?:\{\{)|(?:\}\}))+)|(?:\{[0-9]+\}))+$/)) {
@@ -328,6 +329,7 @@ var last_stopped_data = undefined;
 // when command line is submitted with Enter...
 input.on('submit', function(data) {
      input.hide();
+     input.removeListener('keypress', _keypress);
      screen.render();
 
      // replay last command when hit enter
@@ -371,40 +373,42 @@ input.key('C-q', function() {
     process.exit(0);
 });
 
+function _keypress(ch, key) {
+  switch (key.name) {
+      case 'up':
+          if (submit_history.length == 0)
+              return;
+          submit_hist_idx--;
+          if (submit_hist_idx < 0)
+              submit_hist_idx += submit_history.length
+          submit_hist_idx = submit_hist_idx % submit_history.length;
+          input.setValue(submit_history[submit_hist_idx]);
+          screen.render();
+          break;
+      case 'down':
+          if (submit_history.length == 0)
+              return;
+          submit_hist_idx ++;
+          submit_hist_idx = submit_hist_idx % submit_history.length;
+          input.setValue(submit_history[submit_hist_idx]);
+          screen.render();
+          break;
+      case 'f5':
+          input.emit('submit', 'continue');
+          break;
+      case 'f9':
+          input.emit('submit', 'b ');
+          break;
+      case 'f10':
+          input.emit('submit', 'next');
+          break;
+      case 'f11':
+          input.emit('submit', 'si');
+  }
+}
+
 // handle special keys
-input.on('keypress', function(ch, key) {
-    switch (key.name) {
-        case 'up':
-            if (submit_history.length == 0)
-                return;
-            submit_hist_idx--;
-            if (submit_hist_idx < 0)
-                submit_hist_idx += submit_history.length
-            submit_hist_idx = submit_hist_idx % submit_history.length;
-            input.setValue(submit_history[submit_hist_idx]);
-            screen.render();
-            break;
-        case 'down':
-            if (submit_history.length == 0)
-                return;
-            submit_hist_idx ++;
-            submit_hist_idx = submit_hist_idx % submit_history.length;
-            input.setValue(submit_history[submit_hist_idx]);
-            screen.render();
-            break;
-        case 'f5':
-            input.emit('submit', 'continue');
-            break;
-        case 'f9':
-            input.emit('submit', 'b ');
-            break;
-        case 'f10':
-            input.emit('submit', 'next');
-            break;
-        case 'f11':
-            input.emit('submit', 'si');
-    }
-});
+input.on('keypress', _keypress);
 
 function mylog(msg) {
     status.pushLine(msg.replace(/\n/g,''));
@@ -435,13 +439,13 @@ child.on('exit', function (code, signal) {
     process.exit(1);
 });
 
-// child.stdout.on('data', function(data) {
-//     stdout.pushLine(data.toString());
-//     stdout.setScrollPerc(100);
-//     screen.render();
-// });
+child.stdout.on('data', function(data) {
+    stdout.pushLine(data.toString());
+    stdout.setScrollPerc(100);
+    screen.render();
+});
 
-// child.stderr.on('data', function(data) {
+// // child.stderr.on('data', function(data) {
 //     mylog(data);
 // });
 
@@ -453,8 +457,6 @@ screen.key(['C-c'], function(ch, key) {
     child.kill('SIGINT');
     gdbmi.cmdMI('-exec-interrupt --all').then(
       function() {
-        input.show();
-        input.focus();
         mylog('CTRL-c exit');
       }
      );
@@ -542,37 +544,41 @@ async function get_info(data) {
             mylog(result);
         }
     )
-    // await gdbmi.cmd('info locals').then(
-    //     function(result) {
-    //         vars.setContent('');
-    //         result = result.split('\n');
-    //         for (i in result) {
-    //             let  r = result[i].match(/(.*)\s*=\s*(.*)/i);
-    //             if (!r)
-    //                 continue;
-    //             let r1 = r[1];
-    //             gdbmi.cmd(format('ptype {0}', r1)).then(
-    //                 function(result) {
-    //                     let r2 = result.match(/type\s*=\s*(.*)/i);
-    //                     if (r2) {
-    //                         vars.pushLine(format("{0} {1} {2}", r2[1], r[1], r[2]));
-    //                     }
-    //                 }
-    //             ).then(
-    //                 function(result) {
-    //                     screen.render();
-    //                     gdbmi.on('console', _console);
-    //                 }
-    //             )
-    //         }
-    //     }
-    // )
+    await gdbmi.cmd('info locals').then(
+        function(result) {
+
+            function get_type(result, p_r) {
+              let  r = result.match(/(.*)\s*=\s*(.*)/i);
+              if (!r)
+                  return undefined;;
+              let r1 = r[1];
+              return gdbmi.cmd(format('ptype {0}', r1)).then(
+                  function(result) {
+                      let r2 = result.match(/type\s*=\s*(.*)/i);
+                      if (r2) {
+                          vars.pushLine(format("{0} {1} {2}", r2[1], r[1], r[2]));
+                      }
+                  }
+              )
+            }
+
+            vars.setContent('');
+            result = result.split('\n');
+            serial(result, get_type).then(
+              function()
+              {
+                screen.render();
+              }
+            );
+        }
+    )
     gdbmi.on('console', _console);
   }
 
 // called when debugee stopped
 gdbmi.on('stopped', function(data) {
     mylog(data.reason);
+    input.on('keypress', _keypress);
     input.show();
     input.focus();
     statusbar.setText('stopped');
