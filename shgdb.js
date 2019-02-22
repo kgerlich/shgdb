@@ -439,11 +439,24 @@ child.on('exit', function (code, signal) {
     process.exit(1);
 });
 
-child.stdout.on('data', function(data) {
-    stdout.pushLine(data.toString());
+var stdout_cache = []
+
+function _timerStdout () {
+  for (let l in stdout_cache) {
+    stdout.pushLine(stdout_cache[l]);
+  }
+  if(stdout_cache.length) {
+    stdout_cache = []
     stdout.setScrollPerc(100);
     screen.render();
+  }
+  setTimeout(_timerStdout, 2);
+}
+
+child.stdout.on('data', function(data) {
+    stdout_cache.push(data.toString());
 });
+setTimeout(_timerStdout, 1);
 
 // // child.stderr.on('data', function(data) {
 //     mylog(data);
@@ -481,7 +494,8 @@ gdbmi.on('notify', function(data) {
                 get_info(last_stopped_data).then(
                     function() {
                         screen.render();
-                    }
+                        gdbmi.on('console', _console);
+                      }
                 )
             }
             break;
@@ -572,7 +586,6 @@ async function get_info(data) {
             );
         }
     )
-    gdbmi.on('console', _console);
   }
 
 // called when debugee stopped
@@ -593,6 +606,7 @@ gdbmi.on('stopped', function(data) {
         get_info(data).then(
             function() {
                 screen.render();
+                gdbmi.on('console', _console);
             }
         )
 
