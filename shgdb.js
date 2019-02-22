@@ -1,7 +1,8 @@
 const gdbmi_class = require('./gdbmi').gdbmi;
 const { spawn } = require('child_process');
 const babel = require('babel-polyfill');
-const blessed = require('neo-blessed');
+const blessed = require('blessed');
+const contrib = require('blessed-contrib');
 const { serial, parallel } = require('items-promise');
 
 function format(fmt, ...args) {
@@ -47,8 +48,8 @@ var source = blessed.box({
         type: 'line',
     },
     style: {
-      fg: 'white',
-      bg: 'blue',
+      fg: 'yellow',
+      bg: '#001060',
       border: {
         fg: '#f0f0f0'
       },
@@ -76,116 +77,67 @@ var title = blessed.text({
     },
   });
 
-var vars = blessed.box({
-    top: 'top',
-    right: '0',
-    width: '30%',
-    height: '25%',
-    content: '',
-    tags: true,
-    border: {
-      type: 'line'
-    },
-    style: {
-      fg: 'white',
-      border: {
-        fg: '#f0f0f0'
-      },
-      hover: {
-        bg: 'green'
-      }
-    },
-    alwaysScroll:true,
-    keys:true,
-    mouse:true,
-    scrollable: true,
-    scrollbar: {
-      style: {
-        bg: 'blue'
-      }
-    }
+var vars = contrib.table(
+  { keys: true,
+    mouse: true,
+   fg: 'white',
+   selectedFg: 'white',
+   selectedBg: 'blue',
+   interactive: true,
+   label: 'Locals',
+   right: 0,
+   top: 0,
+   width: '30%',
+   height: '25%',
+   border: {type: "line", fg: "cyan"},
+   columnSpacing: 5, //in chars
+   columnWidth: [10, 10, 10] /*in chars*/
 });
 
-var backtrace = blessed.box({
-    top: '25%',
-    right: '0',
-    width: '30%',
-    height: '10%',
-    content: '',
-    tags: true,
-    border: {
-      type: 'line'
-    },
-    style: {
-      fg: 'white',
-      border: {
-        fg: '#f0f0f0'
-      },
-      hover: {
-        bg: 'green'
-      }
-    },
-    alwaysScroll:true,
-    keys:true,
-    mouse:true,
-    scrollable: true,
-    scrollbar: {
-      style: {
-        bg: 'blue'
-      }
-    }
+var backtrace = contrib.table(
+  { keys: true,
+    mouse: true,
+   fg: 'white',
+   selectedFg: 'white',
+   selectedBg: 'blue',
+   interactive: true,
+   label: 'Backtrace',
+   top: '25%',
+   right: 0,
+   width: '30%',
+   height: '10%',
+   border: {type: "line", fg: "cyan"},
+   columnSpacing: 5, //in chars
+   columnWidth: [10, 10, 10, 10] /*in chars*/
 });
 
-var breakpoints = blessed.box({
-    top: '35%',
-    right: '0',
-    width: '30%',
-    height: '10%',
-    content: '',
-    tags: true,
-    border: {
-      type: 'line'
-    },
-    style: {
-      fg: 'white',
-      border: {
-        fg: '#f0f0f0'
-      },
-      hover: {
-        bg: 'green'
-      }
-    },
-    alwaysScroll:true,
-    keys:true,
-    mouse:true,
-    scrollable: true,
-    scrollbar: {
-      style: {
-        bg: 'blue'
-      }
-    }
-});
+var breakpoints = contrib.table(
+  { keys: true,
+    mouse: true,
+   fg: 'white',
+   selectedFg: 'white',
+   selectedBg: 'blue',
+   interactive: true,
+   label: 'Backtrace',
+   top: '35%',
+   right: '0',
+   width: '30%',
+   height: '10%',
+   border: {type: "line", fg: "cyan"},
+   columnSpacing: 5, //in chars
+   columnWidth: [10, 10, 10, 10] /*in chars*/
+ });
 
-var status = blessed.box({
+var status = contrib.log(
+  {
     top: '50%',
     right: '0',
     width: '30%',
     height: '25%',
-    content: '',
-    tags: true,
-    border: {
-      type: 'line'
-    },
-    style: {
-      fg: 'white',
-      border: {
-        fg: '#f0f0f0'
-      },
-      hover: {
-        bg: 'green'
-      }
-    },
-    alwaysScroll:true,
+    fg: "white",
+    selectedFg: "green",
+    label: 'Status',
+    border: {type: "line", fg: "cyan"},
     keys:true,
     mouse:true,
     scrollable: true,
@@ -194,7 +146,7 @@ var status = blessed.box({
         bg: 'blue'
       }
     }
-});
+  })
 
 var cmd = blessed.box({
     bottom: 2,
@@ -223,45 +175,25 @@ var cmd = blessed.box({
     }
 });
 
-var stdout = blessed.box({
+var stdout = contrib.log(
+  {
     bottom: 2,
     left: '50%',
     width: '50%',
     height: '25%-2',
-    content: '',
-    tags: true,
-    border: {
-      type: 'line'
-    },
-    style: {
-      fg: 'white',
-      border: {
-        fg: '#A0A0A0 '
-      }
-    },
+    fg: "white",
+    selectedFg: "green",
+    label: 'Status',
+    border: {type: "line", fg: "cyan"},
     keys:true,
     mouse:true,
-    alwaysScroll:true,
     scrollable: true,
     scrollbar: {
       style: {
         bg: 'blue'
       }
     }
-});
-
-var stdout_title = blessed.text({
-    bottom: 3,
-    left: '50%+2',
-    width: '6',
-    height: '1',
-    content: 'STDOUT',
-    tags: true,
-    style: {
-      fg: 'black',
-      bg: 'white'
-    },
-});
+  })
 
 var prompt  = blessed.text({
     bottom: 1,
@@ -304,19 +236,37 @@ var statusbar = blessed.textbox({
     },
 });
 
-// Append our box to the screen.
-screen.append(source);
-screen.append(title);
-screen.append(vars);
-screen.append(backtrace);
-screen.append(breakpoints);
-screen.append(status);
-screen.append(cmd);
-screen.append(stdout);
-screen.append(stdout_title);
-screen.append(prompt);
-screen.append(input);
-screen.append(statusbar);
+var container = blessed.box({
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+});
+
+var source_container = blessed.box({
+  top: 0,
+  left: 0,
+  width: '70%',
+  height: '70%',
+});
+var info_container = blessed.box({
+  width: '30%',
+  height: '70%',
+});
+
+// Append our box to the container.
+container.append(source);
+container.append(title);
+container.append(vars);
+container.append(backtrace);
+container.append(breakpoints);
+container.append(status);
+container.append(cmd);
+container.append(stdout);
+container.append(prompt);
+container.append(input);
+container.append(statusbar);
+screen.append(container);
 input.focus();
 screen.render();
 
@@ -411,8 +361,7 @@ function _keypress(ch, key) {
 input.on('keypress', _keypress);
 
 function mylog(msg) {
-    status.pushLine(msg.replace(/\n/g,''));
-    status.setScrollPerc(100);
+    status.log(msg.replace(/\n/g,''));
     screen.render();
 }
 
@@ -443,11 +392,10 @@ var stdout_cache = []
 
 function _timerStdout () {
   for (let l in stdout_cache) {
-    stdout.pushLine(stdout_cache[l]);
+    stdout.log(stdout_cache[l]);
   }
   if(stdout_cache.length) {
     stdout_cache = []
-    stdout.setScrollPerc(100);
     screen.render();
   }
   setTimeout(_timerStdout, 2);
@@ -520,13 +468,17 @@ async function get_info(data) {
     await gdbmi.cmdMI('-stack-list-frames').then(
         function(result) {
             backtrace.setContent('');
+            let table = []
             var s = result.stack;
-            for (var i in s) {
-                backtrace.setLine(i, format("{0} {1}:{2} {3}", s[i].level, s[i].func, s[i].line, s[i].file))
-                if (s[i].level == 0) {
-                    title.setText(s[i].fullname);
-                }
+            for (var  i in s) {
+                table.push([s[i].level, s[i].func, s[i].line, s[i].file])
             }
+            backtrace.setData(
+              {
+                headers: ['Num', 'Function', 'Line', 'File'],
+                data: table
+              }
+            );
         }
     );
     await gdbmi.cmd(format('set listsize {0}',h-2));
@@ -560,17 +512,18 @@ async function get_info(data) {
     )
     await gdbmi.cmd('info locals').then(
         function(result) {
-
+            let table = []
+            let w = vars.width;
             function get_type(result, p_r) {
               let  r = result.match(/(.*)\s*=\s*(.*)/i);
               if (!r)
                   return undefined;;
               let r1 = r[1];
-              return gdbmi.cmd(format('ptype {0}', r1)).then(
+                return gdbmi.cmd(format('whatis {0}', r1)).then(
                   function(result) {
                       let r2 = result.match(/type\s*=\s*(.*)/i);
                       if (r2) {
-                          vars.pushLine(format("{0} {1} {2}", r2[1], r[1], r[2]));
+                          table.push([r2[1], r[1], r[2]]);
                       }
                   }
               )
@@ -581,6 +534,11 @@ async function get_info(data) {
             serial(result, get_type).then(
               function()
               {
+                vars.setData(
+                {
+                  headers: ['Type', 'Name', 'Val'],
+                  data: table
+                });
                 screen.render();
               }
             );
