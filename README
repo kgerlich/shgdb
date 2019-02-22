@@ -13,7 +13,8 @@ sudo apt-get install -y nodejs
 ### required node.js modules
 npm install gdb-mi-parser
 npm install babel-polyfill
-npm install neo-blessed
+npm install blessed
+npm install blessed-contrib
 npm install items-promise
 
 ### debug in Visual Code
