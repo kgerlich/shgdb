@@ -23,9 +23,8 @@ function format(fmt, ...args) {
 // Create a screen object.
 var screen = blessed.screen({
   smartCSR: true,
-  autoPadding: true
-});
 
+});
 screen.title = 'GDB shell with node-js and gdb-js';
 
 screen.key('C-q', function() {
@@ -39,7 +38,7 @@ screen.on('resize', function() {
 // Create a box perfectly centered horizontally and vertically.
 var source = blessed.box({
     top: 'top',
-    left: 'left',
+    left: 0,
     width: '70%',
     height: '75%',
     content: '',
@@ -62,19 +61,8 @@ var source = blessed.box({
       style: {
         bg: 'blue'
       }
-    }
-  });
-
-var title = blessed.text({
-    top: 0,
-    left: 3,
-    width: '70%-5',
-    height: 1,
-    content: 'test',
-    style: {
-      fg: 'black',
-      bg: 'white',
     },
+    label: ''
   });
 
 var vars = contrib.table(
@@ -85,7 +73,7 @@ var vars = contrib.table(
    selectedBg: 'blue',
    interactive: true,
    label: 'Locals',
-   right: 0,
+   left: '70%',
    top: 0,
    width: '30%',
    height: '25%',
@@ -103,7 +91,7 @@ var backtrace = contrib.table(
    interactive: true,
    label: 'Backtrace',
    top: '25%',
-   right: 0,
+   left: '70%',
    width: '30%',
    height: '10%',
    border: {type: "line", fg: "cyan"},
@@ -120,7 +108,7 @@ var breakpoints = contrib.table(
    interactive: true,
    label: 'Backtrace',
    top: '35%',
-   right: '0',
+   left: '70%',
    width: '30%',
    height: '10%',
    border: {type: "line", fg: "cyan"},
@@ -131,7 +119,7 @@ var breakpoints = contrib.table(
 var status = contrib.log(
   {
     top: '50%',
-    right: '0',
+    left: '70%',
     width: '30%',
     height: '25%',
     fg: "white",
@@ -149,10 +137,10 @@ var status = contrib.log(
   })
 
 var cmd = blessed.box({
-    bottom: 2,
-    left: 'left',
-    width: '50%',
-    height: '25%-2',
+    top: '75%',
+    left: 0,
+    width: '60%',
+    height: '25%-1',
     content: '',
     tags: true,
     border: {
@@ -177,10 +165,10 @@ var cmd = blessed.box({
 
 var stdout = contrib.log(
   {
-    bottom: 2,
-    left: '50%',
-    width: '50%',
-    height: '25%-2',
+    top: '75%',
+    left: '60%',
+    width: '40%',
+    height: '25%-1',
     fg: "white",
     selectedFg: "green",
     label: 'Status',
@@ -256,7 +244,6 @@ var info_container = blessed.box({
 
 // Append our box to the container.
 container.append(source);
-container.append(title);
 container.append(vars);
 container.append(backtrace);
 container.append(breakpoints);
@@ -423,7 +410,7 @@ screen.key(['C-c'], function(ch, key) {
      );
  });
 
- function _console(data) {
+function _console(data) {
     mylogcmd(data.toString());
 }
 
@@ -472,6 +459,9 @@ async function get_info(data) {
             var s = result.stack;
             for (var  i in s) {
                 table.push([s[i].level, s[i].func, s[i].line, s[i].file])
+                if (s[i].level == 0) {
+                  source.label = s[i].fullname;
+                }
             }
             backtrace.setData(
               {
@@ -496,10 +486,11 @@ async function get_info(data) {
                         bg_color = '{blue-bg}';
                         bg_color_end = '{/blue-bg}';
                     }
+                    r[2] = r[2].replace(/\n/i, '\\n'); 
                     if ((r[1] == data.frame.line) || bLineBp) {
-                        source.setLine(i, '{black-fg}' + bg_color + '{bold}' + r[2] + '{/bold}' + bg_color_end + '{/black-fg}');
+                        source.setLine(i, ("0" + r[1]).slice(-2) + ' {black-fg}' + bg_color + '{bold}' + r[2] + '{/bold}' + bg_color_end + '{/black-fg}');
                     } else {
-                        source.setLine(i, r[2]);
+                        source.setLine(i, ("0" + r[1]).slice(-2) + ' ' + r[2]);
                     }
                 } else {
                     mylog('malformed line');
@@ -510,10 +501,12 @@ async function get_info(data) {
             mylog(result);
         }
     )
-    await gdbmi.cmd('info locals').then(
+    await new Promise((resolve, reject) => {
+      gdbmi.cmd('info locals').then(
         function(result) {
             let table = []
             let w = vars.width;
+
             function get_type(result, p_r) {
               let  r = result.match(/(.*)\s*=\s*(.*)/i);
               if (!r)
@@ -539,11 +532,12 @@ async function get_info(data) {
                   headers: ['Type', 'Name', 'Val'],
                   data: table
                 });
-                screen.render();
+                resolve(result);
               }
             );
         }
     )
+    });
   }
 
 // called when debugee stopped

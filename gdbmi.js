@@ -57,7 +57,7 @@ class gdbmi extends EventEmitter {
             let console_out = '';
             let seq = this.command_seq++;
             function _console(d) {
-                console_out += d;
+                console_out += d.replace(/[\n|\r][^$]/g,'\\n');
             }
             function _done(d) {
                 if (parseInt(d.token) >= seq) {
