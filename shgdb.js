@@ -348,11 +348,17 @@ function _keypress(ch, key) {
 input.on('keypress', _keypress);
 
 function mylog(msg) {
+    if (!msg) {
+      return;
+    }
     status.log(msg.replace(/\n/g,''));
     screen.render();
 }
 
 function mylogcmd(msg) {
+    if (!msg) {
+      return;
+    }
     cmd.pushLine(msg.replace(/\n/g,''));
     cmd.setScrollPerc(100);
     screen.render();
